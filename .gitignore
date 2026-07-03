@@ -1,0 +1,8 @@
+# Editör / işletim sistemi
+.vscode/
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Yerel araç yapılandırması
+.claude/

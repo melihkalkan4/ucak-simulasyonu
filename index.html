@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Boğaziçi Havayolları — Uçuş Operasyon Merkezi</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header id="topbar">
+  <div class="brand">✈ BOĞAZİÇİ HAVAYOLLARI <span>Uçuş Operasyon Merkezi</span></div>
+  <div id="clock">—</div>
+  <div class="speed-controls">
+    <button data-speed="0" title="Duraklat">⏸</button>
+    <button data-speed="1">1 dk/sn</button>
+    <button data-speed="5" class="active">5 dk/sn</button>
+    <button data-speed="15">15 dk/sn</button>
+  </div>
+  <div id="stats"></div>
+</header>
+<main>
+  <aside id="left">
+    <h2>Uçuşlar</h2>
+    <div id="flight-list" class="scroll"></div>
+    <h2>Filo</h2>
+    <div id="fleet-list" class="scroll"></div>
+  </aside>
+  <section id="map-wrap"><canvas id="map"></canvas>
+    <div id="legend">
+      <span><i class="dot ts"></i>Oraj</span>
+      <span><i class="dot turb"></i>Türbülans</span>
+      <span><i class="dot ice"></i>Buzlanma</span>
+      <span><i class="dot fog"></i>≋ Düşük görüş</span>
+    </div>
+  </section>
+  <aside id="right">
+    <h2>Uçuş Detayı</h2>
+    <div id="detail-body"></div>
+    <h2>Operasyon Günlüğü</h2>
+    <div id="log" class="scroll"></div>
+  </aside>
+</main>
+<script src="js/data.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/weather.js"></script>
+<script src="js/flight.js"></script>
+<script src="js/sim.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
