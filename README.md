@@ -4,6 +4,8 @@ Kurgusal bir havayolu şirketinin (BJ / "BOSPHORUS") tüm uçuş operasyonunu
 gerçek zamanlı simüle eden, tarayıcıda çalışan bir uygulama. Harici bağımlılık
 yoktur; saf HTML + CSS + JavaScript.
 
+**🔗 Canlı demo: https://melihkalkan4.github.io/ucak-simulasyonu/**
+
 ![Uçuş Operasyon Merkezi](docs/ekran-operasyon-merkezi.png)
 
 *Seçili uçuş: büyük daire rotası, canlı telemetri ve olay geçmişi*
