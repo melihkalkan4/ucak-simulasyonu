@@ -49,6 +49,35 @@ kurala göre hesaplanır: sefer yakıtı + %5 + alternatif meydan + 45 dk rezerv
   (MAYDAY + acil alçalma), tıbbi acil durum (en yakın meydana iniş), hidrolik
   uyarısı (varışta bakım). Olay yaşayan uçak yerde +90 dk bakıma alınır.
 
+### 🤖 AI Uçuş Danışmanı (gerçek verilerle)
+Her uçuş tarifeye eklendiğinde AI dispatch sistemi **gerçek dünya verisiyle**
+rota analizi yapar ve önerilerini otomatik uygular:
+
+![AI Uçuş Analizi](docs/ekran-ai-analiz.png)
+
+- **GIS arazi profili:** Rota (ve kuzey/güney varyantları) Copernicus DEM 90 m
+  yükseklik modeliyle örneklenir; MSA (asgari emniyet irtifası) hesaplanır ve
+  uçağın **tek-motor drift-down tavanıyla** karşılaştırılır. Detay panelinde
+  arazi kesiti, seyir irtifası ve tek-motor tavanı çizgileriyle görselleştirilir.
+- **Gerçek meteoroloji (Open-Meteo):** Seyir seviyesine karşılık gelen basınç
+  seviyesindeki (200–500 hPa) gerçek rüzgârlar → karşı/arka rüzgâr bileşeni,
+  blok süre etkisi ve **irtifa değişikliği önerisi**; CAPE (konvektif enerji) →
+  oraj riski; donma seviyesi → turboprop buzlanma bandı; varış meydanının
+  gerçek görüş/hamle rüzgârı/yağış tahmini → CAT III / divert riski.
+- **Rota optimizasyonu:** Direkt rota ile ±4° enlem varyantları rüzgâr, fırtına
+  hücresi kesişimi ve arazi cezalarıyla puanlanır; kazanç varsa uçuş **gerçekten
+  önerilen varyanttan uçar** (haritada "AI WPT" ara noktası görünür).
+- **Otomatik uygulanan öneriler:** ekstra yakıt yüklemesi, alternatif meydan
+  ataması (bekleme paterninden divert'te kullanılır), seyir irtifası değişikliği.
+- **Öngörülü bakım:** Uçak başına kullanım saati + olay geçmişinden bakım risk
+  skoru (filo panelinde canlı); skor 70'i aşan uçak üssüne döndüğünde otomatik
+  planlı kontrole alınır.
+- **Risk raporu:** 6 kategoride skor (fırtına, rüzgâr, arazi, buzlanma, varış,
+  uçak) + genel risk; bulgular ve öneriler uçuş detayında listelenir.
+- İnternet yoksa danışman **sentetik modele** düşer; üst barda veri kaynağı
+  (Gerçek/Sentetik) gösterilir. API istekleri hız limitine takılmamak için
+  seri kuyruktan akar, başarısız analiz bir kez yeniden denenir.
+
 ### Şirket katmanı
 Uçaklar otomatik tarifelenir (üsten çık, üsse dön), turnaround süreleri
 işler; üst barda tamamlanan uçuş, zamanındalık (%), divert, iptal, taşınan
@@ -66,11 +95,19 @@ yolcu, gelir ve yakıt tüketimi izlenir.
 ```
 index.html        arayüz iskeleti
 css/style.css     koyu "operasyon merkezi" teması
-js/data.js        uçak tipleri, 40 havalimanı, filo planı
-js/geo.js         büyük daire matematiği, jet akımı modeli
-js/weather.js     dinamik hava hücreleri + meydan meteorolojisi
-js/flight.js      uçuş faz makinesi, yakıt, olaylar, divert mantığı
+js/data.js        uçak tipleri (tek-motor tavanı dahil), 40 havalimanı, filo
+js/geo.js         büyük daire matematiği, yol örnekleme, jet akımı modeli
+js/geodata.js     gerçek veri istemcisi: Open-Meteo hava + Copernicus DEM
+js/weather.js     dinamik hava hücreleri + meydan meteorolojisi (sim)
+js/flight.js      uçuş faz makinesi, yakıt, olaylar, divert, AI via desteği
+js/advisor.js     AI uçuş danışmanı: risk analizi, rota/irtifa/yakıt önerisi
 js/sim.js         simülasyon saati, tarifeleme, istatistikler
-js/ui.js          canvas harita + paneller
+js/ui.js          canvas harita + paneller + AI rapor bloğu
 js/main.js        başlatma ve ana döngü
 ```
+
+## Veri kaynakları
+- [Open-Meteo Forecast API](https://open-meteo.com/) — basınç seviyesi
+  rüzgârları, CAPE, donma seviyesi, meydan görüş/rüzgâr/yağış (anahtarsız)
+- [Open-Meteo Elevation API](https://open-meteo.com/en/docs/elevation-api) —
+  Copernicus GLO-90 sayısal yükseklik modeli (GIS arazi profilleri)

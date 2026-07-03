@@ -60,6 +60,31 @@ class Flight {
     this.handledCells = new Set();
     this.lowVisWarned = false;
     this.events = [];           // bu uçuşa ait günlük satırları
+
+    // AI danışman alanları
+    this.via = null;               // rota ara noktası (AI varyantı)
+    this.cruiseAltOverride = null; // AI irtifa önerisi
+    this.report = null;            // AI risk raporu
+    this.alternate = null;         // AI'nin seçtiği alternatif meydan
+  }
+
+  // Rota üzerinde fr (0..1) oranındaki nokta — via ara noktasını dikkate alır
+  pathPoint(fr) {
+    if (!this.via) return gcPoint(this.routeFrom, this.routeTo, fr);
+    const d1 = distKm(this.routeFrom, this.via), d2 = distKm(this.via, this.routeTo);
+    const d = fr * (d1 + d2);
+    return d <= d1 ? gcPoint(this.routeFrom, this.via, d / Math.max(d1, 1e-9))
+                   : gcPoint(this.via, this.routeTo, (d - d1) / Math.max(d2, 1e-9));
+  }
+
+  // AI rota varyantını uygula (yalnızca kalkıştan önce)
+  setVia(via) {
+    if (this.distFlown > 0 || this.diverted) return false;
+    this.via = via;
+    const old = this.routeDist;
+    this.routeDist = distKm(this.routeFrom, via) + distKm(via, this.routeTo);
+    this.schedArr += Math.round((this.routeDist - old) / (this.type.cruiseSpeed * 0.85) * 60);
+    return true;
   }
 
   log(msg, level = "info") {
@@ -82,14 +107,15 @@ class Flight {
     this.gs = Math.max(120, tas + wind);
     this.distFlown = Math.min(this.routeDist, this.distFlown + this.gs * dt / 60);
     const f = this.routeDist > 0 ? this.distFlown / this.routeDist : 1;
-    this.pos = gcPoint(this.routeFrom, this.routeTo, f);
-    const ahead = gcPoint(this.routeFrom, this.routeTo, Math.min(1, f + 0.01));
+    this.pos = this.pathPoint(f);
+    const ahead = this.pathPoint(Math.min(1, f + 0.01));
     this.hdg = bearing(this.pos, ahead);
   }
 
   // ---- Divert: rotayı mevcut konumdan yeni meydana çevir ----
   beginDivert(airport, reason, level = "warn") {
     this.diverted = true;
+    this.via = null;
     this.divertReason = reason;
     this.routeFrom = { lat: this.pos.lat, lon: this.pos.lon };
     this.routeTo = airport;
@@ -105,9 +131,10 @@ class Flight {
   descentDist() { return this.cruiseAltFor() * 0.0185 + 30; } // ~3° süzülüş + yaklaşma payı
 
   cruiseAltFor() {
-    // kısa bacaklarda daha alçak seyir
-    const cap = this.routeDist < 400 ? 8000 : this.type.cruiseAlt;
-    return Math.min(cap, this.type.cruiseAlt);
+    // kısa bacaklarda daha alçak seyir; AI irtifa önerisi varsa onu kullan
+    if (this.routeDist < 400) return Math.min(8000, this.type.cruiseAlt);
+    const target = this.cruiseAltOverride || this.type.cruiseAlt;
+    return Math.min(target, this.type.ceiling - 300);
   }
 
   // ============================ ANA GÜNCELLEME ============================
@@ -161,7 +188,7 @@ class Flight {
               this.birdReturn = true; // tırmanışta meydana geri dönecek
             } else {
               this.log("göstergeler normal, uçuşa devam ediliyor", "ok");
-              this.aircraft.needsCheck = true;
+              this.aircraft.needsCheck = true; this.aircraft.eventCount++;
             }
           }
         }
@@ -181,7 +208,7 @@ class Flight {
         if (this.birdReturn && this.alt > 2000) {
           this.birdReturn = false;
           this.majorEvent = true;
-          this.aircraft.needsCheck = true;
+          this.aircraft.needsCheck = true; this.aircraft.eventCount++;
           this.beginDivert(this.origin, "kuş çarpması sonrası ihtiyati geri dönüş", "alert");
           break;
         }
@@ -244,7 +271,8 @@ class Flight {
         }
         const fuelLow = this.fuel < this.reserveFuel + this.type.fuelBurn * 0.5;
         if (this.holdingMin > 45 || fuelLow) {
-          const alt = nearestAirport(this.pos, [dest.code]).airport;
+          const alt = (this.alternate && this.alternate.code !== dest.code)
+            ? this.alternate : nearestAirport(this.pos, [dest.code]).airport;
           this.majorEvent = true;
           if (fuelLow) this.log("yakıt asgari seviyeye yaklaşıyor (MINIMUM FUEL)", "alert");
           this.beginDivert(alt, "bekleme limiti aşıldı", "warn");
@@ -271,7 +299,7 @@ class Flight {
             this.phaseTimer = 0;
             if (Math.random() < 0.004) {
               this.log("yaklaşmada kuş çarpması — iniş normal tamamlanıyor, uçak kontrole alınacak", "warn");
-              this.aircraft.needsCheck = true;
+              this.aircraft.needsCheck = true; this.aircraft.eventCount++;
             }
           }
         }
@@ -307,8 +335,7 @@ class Flight {
   // ---- Rota önündeki hava hücreleri ----
   checkWeatherAhead() {
     const f = this.routeDist > 0 ? this.distFlown / this.routeDist : 1;
-    const lookAhead = gcPoint(this.routeFrom, this.routeTo,
-      Math.min(1, f + 130 / Math.max(this.routeDist, 1)));
+    const lookAhead = this.pathPoint(Math.min(1, f + 130 / Math.max(this.routeDist, 1)));
     const cell = this.sim.weather.cellAt(lookAhead, 20);
     if (!cell || this.handledCells.has(cell.id)) return;
     this.handledCells.add(cell.id);
@@ -357,21 +384,21 @@ class Flight {
       }
     } else if (roll < 0.00005 * dt * paxF + 0.000014 * dt) {
       this.majorEvent = true;
-      this.aircraft.needsCheck = true;
+      this.aircraft.needsCheck = true; this.aircraft.eventCount++;
       this.log("motorda anormal titreşim — motor rölantiye alındı (PAN PAN)", "alert");
       const alt = nearestAirport(this.pos, []).airport;
       this.alt = Math.min(this.alt, 8000);
       this.beginDivert(alt, "motor arızası", "alert");
     } else if (roll < 0.00005 * dt * paxF + 0.000014 * dt + 0.00001 * dt) {
       this.majorEvent = true;
-      this.aircraft.needsCheck = true;
+      this.aircraft.needsCheck = true; this.aircraft.eventCount++;
       this.log("MAYDAY — kabin basıncı düşüyor, acil alçalma!", "alert");
       this.alt = 3000;
       const alt = nearestAirport(this.pos, []).airport;
       this.beginDivert(alt, "kabin basıncı kaybı", "alert");
     } else if (roll > 1 - 0.00002 * dt) {
       this.log("küçük hidrolik sistem uyarısı — uçuş normal, varışta bakım kontrolü yapılacak", "warn");
-      this.aircraft.needsCheck = true;
+      this.aircraft.needsCheck = true; this.aircraft.eventCount++;
     }
   }
 
@@ -408,12 +435,24 @@ class Flight {
     const ac = this.aircraft;
     ac.location = dest.code;
     ac.activeFlight = null;
-    ac.hoursFlown += (this.actualArr - this.actualDep) / 60;
+    const blockH = (this.actualArr - this.actualDep) / 60;
+    ac.hoursFlown += blockH;
+    ac.hoursSinceMaint += blockH;
     let ground = this.type.turnaround + (this.diverted ? 60 : 0);
     if (ac.needsCheck) {
       ground += 90;
       ac.needsCheck = false;
       this.sim.addLog(`${ac.reg} ${dest.code}'de bakım kontrolüne alındı (+90 dk)`, "warn");
+    }
+    // AI öngörülü bakım: risk yüksek ve uçak üssündeyse planlı kontrol
+    if (this.sim.advisor) {
+      const maint = this.sim.advisor.maintenanceRisk(ac);
+      if (maint >= 70 && dest.code === ac.hub) {
+        ground += 180;
+        ac.hoursSinceMaint = 0;
+        ac.eventCount = 0;
+        this.sim.addLog(`AI bakım planı: ${ac.reg} öngörülen risk ${maint}/100 — ${ac.hub}'de 3 saatlik planlı kontrole alındı`, "warn");
+      }
     }
     ac.readyAt = this.sim.t + ground;
     ac.status = "Yerde";

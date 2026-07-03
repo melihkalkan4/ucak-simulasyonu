@@ -62,7 +62,10 @@ class UI {
     this.elClock.textContent = this.sim.fmtTime(this.sim.t);
     const s = this.sim.stats;
     const otp = s.completed ? Math.round(100 * s.onTime / s.completed) : 100;
+    const src = GeoData.online === true ? `<b class="ok-t">Gerçek (Open-Meteo)</b>`
+      : GeoData.online === false ? `<b class="warn-t">Sentetik</b>` : `<b>—</b>`;
     this.elStats.innerHTML =
+      `<span>AI verisi ${src}</span>` +
       `<span>Uçuş <b>${s.completed}</b></span>` +
       `<span>Zamanında <b>%${otp}</b></span>` +
       `<span>Divert <b>${s.diverted}</b></span>` +
@@ -143,17 +146,24 @@ class UI {
       this.planeScreenPos.push({ x: p.x, y: p.y, flight: f });
       const sel = f === this.selected;
 
-      // rota çizgisi
+      // rota çizgisi (AI via ara noktası varsa kırık büyük daire)
       if (sel) {
         ctx.strokeStyle = "rgba(90,200,250,0.55)";
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         for (let i = 0; i <= 40; i++) {
-          const q = this.px(gcPoint(f.routeFrom, f.routeTo, i / 40));
+          const q = this.px(f.pathPoint(i / 40));
           i === 0 ? ctx.moveTo(q.x, q.y) : ctx.lineTo(q.x, q.y);
         }
         ctx.stroke();
         ctx.lineWidth = 1;
+        if (f.via) {
+          const vq = this.px(f.via);
+          ctx.strokeStyle = "rgba(90,200,250,0.8)";
+          ctx.strokeRect(vq.x - 3, vq.y - 3, 6, 6);
+          ctx.fillStyle = "#5ac8fa";
+          ctx.fillText("AI WPT", vq.x + 6, vq.y - 4);
+        }
       }
 
       // uçak üçgeni (rotaya döndürülmüş)
@@ -215,11 +225,70 @@ class UI {
       const fl = ac.activeFlight;
       const st = fl ? `${fl.number} · ${PHASE_LABELS[fl.phase]}` :
         this.sim.t < ac.readyAt ? `${ac.status} · ${Math.max(0, Math.round(ac.readyAt - this.sim.t))} dk sonra hazır` : "Hazır";
+      const maint = this.sim.advisor.maintenanceRisk(ac);
+      const mCls = maint >= 70 ? "alert" : maint >= 40 ? "warn" : "ok";
       html += `<div class="ac-item">
         <div class="fl-top"><b>${ac.reg}</b><span>${ac.location}</span></div>
-        <div class="fl-sub">${ac.typeData.label} · ${st}</div></div>`;
+        <div class="fl-sub">${ac.typeData.label} · ${st}</div>
+        <div class="fl-sub">AI bakım riski: <i class="m-dot ${mCls}"></i>${maint}/100 · ${ac.hoursFlown.toFixed(0)} sa</div></div>`;
     }
     this.elFleet.innerHTML = html;
+  }
+
+  // ---- AI raporu HTML'i ----
+  aiBlock(f) {
+    const r = f.report;
+    if (!r) return `<div class="ai-block"><div class="ai-head">🤖 AI Uçuş Analizi</div>
+      <div class="fl-sub">Analiz hazırlanıyor…</div></div>`;
+    const { label, level } = this.sim.advisor.riskLabel(r.overall);
+    let html = `<div class="ai-block"><div class="ai-head">🤖 AI Uçuş Analizi
+      <span class="risk-chip ${level}">${label} · ${r.overall}/100</span></div>
+      <div class="fl-sub">Veri: ${r.status}${r.wind ? ` · ${r.wind.level === "model" ? "model rüzgârı" : r.wind.level + " hPa rüzgârı"} ort. ${r.wind.avgComp > 0 ? "+" : ""}${r.wind.avgComp} km/sa` : ""}</div>`;
+    html += `<div class="ai-cats">`;
+    for (const [cat, sc] of Object.entries(r.categories)) {
+      const cls = sc >= 70 ? "alert" : sc >= 40 ? "warn" : "ok";
+      html += `<div class="cat"><span>${cat}</span><div class="bar"><i class="${cls}" style="width:${sc}%"></i></div><em>${sc}</em></div>`;
+    }
+    html += `</div>`;
+    if (r.terrain) {
+      html += `<canvas id="terrain-spark" width="272" height="56"></canvas>
+        <div class="fl-sub">GIS arazi profili (Copernicus DEM): maks ${r.terrain.maxElev.toLocaleString("tr-TR")} m · MSA ${r.terrain.msa.toLocaleString("tr-TR")} m</div>`;
+    }
+    if (r.applied.length) html += `<div class="log-line ok">Uygulandı: ${r.applied.join(" · ")}</div>`;
+    for (const fd of r.findings) html += `<div class="log-line ${fd.sev === "info" ? "" : fd.sev}">• ${fd.text}</div>`;
+    html += `</div>`;
+    return html;
+  }
+
+  drawTerrainSpark(f) {
+    const cv = document.getElementById("terrain-spark");
+    if (!cv || !f.report || !f.report.terrain) return;
+    const ctx = cv.getContext("2d");
+    const prof = f.report.terrain.profile;
+    const W = cv.width, H = cv.height;
+    const maxE = Math.max(2000, f.report.terrain.maxElev * 1.15);
+    ctx.clearRect(0, 0, W, H);
+    // seyir irtifası çizgisi
+    const cruise = f.cruiseAltFor();
+    const scaleTop = Math.max(maxE, cruise * 1.05);
+    const yOf = m => H - 4 - (m / scaleTop) * (H - 10);
+    ctx.strokeStyle = "rgba(90,200,250,0.6)";
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(0, yOf(cruise)); ctx.lineTo(W, yOf(cruise)); ctx.stroke();
+    ctx.setLineDash([]);
+    // tek motor tavanı
+    ctx.strokeStyle = "rgba(224,160,64,0.55)";
+    ctx.beginPath(); ctx.moveTo(0, yOf(f.type.seCeiling)); ctx.lineTo(W, yOf(f.type.seCeiling)); ctx.stroke();
+    // arazi
+    ctx.fillStyle = "rgba(125,155,191,0.45)";
+    ctx.beginPath();
+    ctx.moveTo(0, H);
+    prof.forEach((e, i) => ctx.lineTo(i / (prof.length - 1) * W, yOf(e)));
+    ctx.lineTo(W, H); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "#7d9bbf";
+    ctx.font = "9px 'Segoe UI', sans-serif";
+    ctx.fillText("seyir", 2, yOf(cruise) - 2);
+    ctx.fillText("1 motor tavanı", 2, yOf(f.type.seCeiling) - 2);
   }
 
   renderDetail() {
@@ -240,12 +309,15 @@ class UI {
     ];
     let html = "<table>";
     for (const [k, v] of rows) html += `<tr><td>${k}</td><td>${v}</td></tr>`;
-    html += "</table><div class='fl-events'>";
+    html += "</table>";
+    html += this.aiBlock(f);
+    html += "<div class='fl-events'>";
     for (const e of f.events.slice(-8).reverse()) {
       html += `<div class="log-line ${e.level}"><span>${this.sim.fmtTime(e.t)}</span> ${e.msg}</div>`;
     }
     html += "</div>";
     this.elDetail.innerHTML = html;
+    this.drawTerrainSpark(f);
   }
 
   renderLog() {

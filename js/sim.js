@@ -23,7 +23,10 @@ class Simulation {
       activeFlight: null,
       needsCheck: false,
       hoursFlown: 0,
+      hoursSinceMaint: Math.random() * 35,  // filo farklı bakım evrelerinde başlar
+      eventCount: 0,
     }));
+    this.advisor = new AIAdvisor(this);
     this.weather.init(this.t);
     this.addLog(`${AIRLINE.name} Uçuş Operasyon Merkezi açıldı — ${this.fleet.length} uçak hizmette`, "ok");
   }
@@ -73,6 +76,7 @@ class Simulation {
       ac.status = "Görevde";
       this.flights.push(fl);
       this.addLog(`${fl.number} tarifeye eklendi: ${origin.code}→${dest.code} · ${ac.reg} (${fl.type.label}) · kalkış ${this.fmtTime(dep)}`);
+      this.advisor.analyzeFlight(fl).catch(() => {});
     }
     // biten uçuşları temizle (son 12'yi geçmiş olarak tut)
     const done = this.flights.filter(f => DONE.has(f.phase));

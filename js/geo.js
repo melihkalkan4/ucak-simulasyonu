@@ -48,6 +48,22 @@ function nearestAirport(pos, exclude = []) {
   return { airport: best, dist: bestD };
 }
 
+// a → (via) → b yolunu n+1 noktayla örnekle (via yoksa düz büyük daire)
+function samplePath(a, via, b, n) {
+  const pts = [];
+  if (!via) {
+    for (let i = 0; i <= n; i++) pts.push(gcPoint(a, b, i / n));
+    return pts;
+  }
+  const d1 = distKm(a, via), d2 = distKm(via, b), tot = d1 + d2;
+  for (let i = 0; i <= n; i++) {
+    const d = i / n * tot;
+    pts.push(d <= d1 ? gcPoint(a, via, d / Math.max(d1, 1e-9))
+                     : gcPoint(via, b, (d - d1) / Math.max(d2, 1e-9)));
+  }
+  return pts;
+}
+
 // Kuzey yarımküre jet akımı modeli: ~45° enlemde doğuya doğru güçlü rüzgâr.
 // Dönüş: rotaya etki eden yer hızı bileşeni (km/sa, + arka rüzgâr)
 function windComponent(pos, brg) {
