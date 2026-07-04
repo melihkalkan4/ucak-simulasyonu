@@ -84,8 +84,9 @@ işler; üst barda tamamlanan uçuş, zamanındalık (%), divert, iptal, taşın
 yolcu, gelir ve yakıt tüketimi izlenir.
 
 ## Arayüz
-- **Harita:** uçaklar (rotaya dönük üçgen), hava hücreleri, havalimanları
-  (≋ = düşük görüş). Uçağa tıklayınca rota ve detay paneli açılır.
+- **Harita:** gerçek dünya haritası (Natural Earth kıyı çizgileri) üzerinde
+  uçaklar (rotaya dönük üçgen), hava hücreleri, havalimanları (≋ = düşük
+  görüş). Uçağa tıklayınca büyük daire rotası ve detay paneli açılır.
 - **Sol panel:** aktif uçuşlar ve filo durumu.
 - **Sağ panel:** seçili uçuşun detayı (irtifa, hız, yakıt, gecikme, olaylar)
   ve tüm şirketin operasyon günlüğü.
@@ -96,6 +97,7 @@ yolcu, gelir ve yakıt tüketimi izlenir.
 index.html        arayüz iskeleti
 css/style.css     koyu "operasyon merkezi" teması
 js/data.js        uçak tipleri (tek-motor tavanı dahil), 40 havalimanı, filo
+js/worldmap.js    gömülü Natural Earth 110m kıta poligonları (gerçek harita)
 js/geo.js         büyük daire matematiği, yol örnekleme, jet akımı modeli
 js/geodata.js     gerçek veri istemcisi: Open-Meteo hava + Copernicus DEM
 js/weather.js     dinamik hava hücreleri + meydan meteorolojisi (sim)
@@ -111,3 +113,6 @@ js/main.js        başlatma ve ana döngü
   rüzgârları, CAPE, donma seviyesi, meydan görüş/rüzgâr/yağış (anahtarsız)
 - [Open-Meteo Elevation API](https://open-meteo.com/en/docs/elevation-api) —
   Copernicus GLO-90 sayısal yükseklik modeli (GIS arazi profilleri)
+- [Natural Earth](https://www.naturalearthdata.com/) 110m kara poligonları
+  (public domain) — haritadaki gerçek kıyı çizgileri; `js/worldmap.js` içine
+  gömülü olduğundan çevrimdışı da çalışır

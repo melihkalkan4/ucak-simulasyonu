@@ -83,6 +83,21 @@ class UI {
     ctx.fillStyle = "#0a0f1a";
     ctx.fillRect(0, 0, W, H);
 
+    // gerçek kıtalar (Natural Earth 110m)
+    ctx.beginPath();
+    for (const ring of WORLD_LAND) {
+      for (let i = 0; i < ring.length; i++) {
+        const p = this.px({ lon: ring[i][0], lat: ring[i][1] });
+        i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y);
+      }
+      ctx.closePath();
+    }
+    ctx.fillStyle = "#101a2e";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(100,150,200,0.30)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
     // graticule
     ctx.strokeStyle = "rgba(80,120,170,0.12)";
     ctx.lineWidth = 1;
